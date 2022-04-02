@@ -172,32 +172,34 @@ pre code {
 
 <div id="parametric-regression-models" class="section level1">
 <h1>Parametric Regression Models</h1>
-<p>Let <span class="math inline">\(Y\)</span> be a response of interest and <span class="math inline">\(X = (X_1, \ldots, X_p)^\mathsf{T}\)</span> a vector explanatory variables. In Section 2.2, Brumback considers three parametric models for the conditional expectation <span class="math inline">\(E(Y| X)\)</span>.</p>
+<p>Let <span class="math inline">\(Y\)</span> be a response of interest and <span class="math inline">\(X = (X_1, \ldots, X_p)^\mathsf{T}\)</span> a vector of explanatory variables. In Section 2.2, Brumback considers three parametric models for the conditional expectation <span class="math inline">\(E(Y| X)\)</span>.</p>
 <ul>
-<li>The linear model: <span class="math display">\[\begin{align*}
-E(Y| X; \beta) = X^\mathsf{T}\beta.
+<li>The <strong>linear model</strong>: <span class="math display">\[\begin{align*}
+E(Y| X) = X^\mathsf{T}\beta.
 \end{align*}\]</span></li>
-<li>The log-linear model: <span class="math display">\[\begin{align*}
-\operatorname{log}(E(Y| X; \beta)) &amp; = X^\mathsf{T}\beta, \\
-E(Y| X; \beta) &amp; = \operatorname{exp}(X^\mathsf{T}\beta; \beta).\\
+<li>The <strong>log-linear model</strong>: <span class="math display">\[\begin{align*}
+\operatorname{log}(E(Y| X)) &amp; = X^\mathsf{T}\beta, \\
+E(Y| X) &amp; = \operatorname{exp}(X^\mathsf{T}\beta).\\
 \end{align*}\]</span></li>
-<li>The logistic model: <span class="math display">\[\begin{align*}
-\operatorname{logit}(E(Y| X; \beta)) &amp; = X^\mathsf{T}\beta, \\
-E(Y| X; \beta) &amp; = \operatorname{expit}(X^\mathsf{T}\beta), \\ 
+<li>The <strong>logistic model</strong>: <span class="math display">\[\begin{align*}
+\operatorname{logit}(E(Y| X)) &amp; = X^\mathsf{T}\beta, \\
+E(Y| X) &amp; = \operatorname{expit}(X^\mathsf{T}\beta), \\ 
 \end{align*}\]</span> where <span class="math inline">\(\operatorname{logit}(p) = \operatorname{log} \left( \frac{p}{1 - p} \right)\)</span> and <span class="math inline">\(\operatorname{exp}(x) = \frac{\operatorname{exp}(x)}{1 - \operatorname{exp}(x)}\)</span>.</li>
 </ul>
 </div>
 <div id="estimating-equations" class="section level1">
 <h1>Estimating Equations</h1>
 <p>In Section 2.3, Brumback considers how to estimate these models from a sample <span class="math inline">\((X_i, Y_i), i = 1, \ldots, n\)</span>. In particular she proposes to use the following estimating equation: <span class="math display">\[\begin{align*}
-U(\beta) = \sum_i X_i^\mathsf{T} (Y_i - E(Y_i| X_i; \beta)) = 0.
+U(\beta) = \sum_i X_i^\mathsf{T} (Y_i - E(Y_i| X_i)) = 0.
 \end{align*}\]</span> Where does this estimating equation come from? Why should we use it? For the linear model, solving <span class="math inline">\(U(\beta) = 0\)</span> is equivalent to minimizing the sum of squares, i.e. <span class="math inline">\(U(\beta) = \frac{\partial Q}{\partial \beta}\)</span> where <span class="math inline">\(Q(\beta) = \sum_i (Y_i - X_i^\mathsf{T}\beta)^2\)</span>. On the other hand, <span class="math inline">\(U(\beta) \neq \frac{\partial Q}{\partial \beta}\)</span> for the other two models.</p>
-<p>Brumback says the estimating equation can be solved iteratively using Newton-Raphson. For the logistic model in particular, she says that in <code>R</code> we can use <code>glm</code> with <code>family = binomial</code>. Since the GLM estimator uses the method of maximum likelihood, this suggests that the estimating equations may be equivalent to maximum likelihood. However, I didn’t immediately recognize their equivalence. Below I consider a logistic regression example and compare the solution to the normal equations with the GLM estimator.</p>
+<p>It turns out that in the case of a Generalized Linear Model (GLM), the above estimating equation is equivalent to the maximum likelihood equation. Depending on the link function, the solution to the estimating equation may not ahve a closed form. Instead, it is usually solved iteratively using a process such as Newton-Raphson. For the logistic model in particular, we can use use the <code>glm</code> function with <code>family = binomial</code> in <code>R</code>. Below, we consider an example using the What-If data and compare the solution to the estimating equation with the GLM estimator.</p>
 </div>
 <div id="example-comparing-ee-and-glm-estimators" class="section level1">
 <h1>Example Comparing EE and GLM Estimators</h1>
 <pre class="r"><code>library(dplyr)
 library(tidyr)
+
+# Data ----------
 
 # Reconstruct the data from the What-If study in Table 1.3
 whatif_compact &lt;- expand_grid(T = c(0, 1), A = c(0, 1), H = c(0, 1), Y = c(0, 1)) %&gt;% 
@@ -205,30 +207,41 @@ whatif_compact &lt;- expand_grid(T = c(0, 1), A = c(0, 1), H = c(0, 1), Y = c(0,
 whatif &lt;- whatif_compact %&gt;% 
   uncount(n)
 
-# GLM estimator for the logistic model
-fit_glm &lt;- glm(formula = Y ~ A + T + H, family = binomial, data = whatif, weights = whatif$n)
+# GLM Estimate ----------
+fit_glm &lt;- glm(formula = Y ~ A + T + H, family = binomial, data = whatif)
 
-# Solve the estimating equations with Newton-Raphson
-X &lt;- model.matrix(fit_glm)
-Y &lt;- whatif$Y
 
-# Link function and its derivative
+# Estimating Equation Estimate ----------
+# Solve the estimating equations with Newton-Raphson.  This should work for any link function g
+
+# Link function and its derivative.  In theory this should work for any link function.
 g &lt;- function(x) exp(x)/(1 + exp(x))
 g_prime &lt;- function(x) exp(x)/(1 + exp(x))^2
+
 # Objective function U(beta)
-U &lt;- function(beta) rowSums(t(X) %*% (Y - g(X %*% beta)))
-# Jacobian of objective function
-J &lt;- function(beta) t(X) %*% diag(-drop(g_prime(X %*% beta))) %*% X
-# Newton-Raphson update
-NR &lt;- function(x_n, J_n, U_n) {
-  x_diff &lt;- solve(J(x_n), -U_n)
-  x_new &lt;- x_n + x_diff
-  return(x_new)
+# depends on design matrix X, response vector Y, and link function g
+U &lt;- function(beta, X, Y, g) rowSums(t(X) %*% (Y - g(X %*% beta)))
+
+# Compute Jacobian of objective function at beta
+# depends on design matrix X, and derivative g_prime of the link function
+J &lt;- function(beta, X, g_prime) t(X) %*% diag(-drop(g_prime(X %*% beta))) %*% X
+
+# Compute Newton-Raphson updates
+NR_step &lt;- function(beta_n, J_n, U_n) beta_n + solve(J_n, -U_n) # single update
+NR &lt;- function(beta_0, X, Y, g, g_prime, steps = 10) {
+  beta_hat &lt;- beta_0
+  for (i in 1:10) beta_hat &lt;- NR_step(beta_hat, J(beta_hat, X, g_prime), U(beta_hat, X, Y, g))
+  return(beta_hat)
 }
 
 # Do 10 Newton-Raphson iterations
-beta_hat &lt;- c(0, 0, 0, 0)
-for (i in 1:10) beta_hat &lt;- NR(beta_hat, J(beta_hat), U(beta_hat))
+beta_hat &lt;- NR(
+  beta_0 = c(0, 0, 0, 0), 
+  X = model.matrix(fit_glm), 
+  Y = whatif$Y,
+  g = g,
+  g_prime = g_prime,
+  steps = 10)
 
 # Compare the estimates
 coef(fit_glm)</code></pre>
